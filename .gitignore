@@ -1,0 +1,9 @@
+node_modules/
+*.tgz
+.DS_Store
+coverage/
+
+# Pi sessions and generated handoffs are private local data.
+.pi/
+handoffs/
+*.jsonl

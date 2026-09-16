@@ -1,0 +1,51 @@
+{
+  "name": "@jpowersdev/pi-relay",
+  "version": "0.1.0",
+  "description": "Durable, model-selectable session handoffs for the Pi coding agent",
+  "license": "MIT",
+  "author": "Jonathan Powers",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jpowersdev/pi-relay.git"
+  },
+  "homepage": "https://github.com/jpowersdev/pi-relay#readme",
+  "bugs": "https://github.com/jpowersdev/pi-relay/issues",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "files": [
+    "extensions",
+    "CHANGELOG.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "coding-agent",
+    "handoff",
+    "session"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/relay.ts"
+    ]
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "packageManager": "npm@11.16.0",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "prepack": "npm run check"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@types/node": "24.12.4",
+    "typescript": "5.9.3"
+  }
+}
