@@ -13,6 +13,7 @@ import { basename, join } from "node:path";
 import type {
   ExtensionAPI,
   ExtensionCommandContext,
+  ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
 const HANDOFF_DIRECTORY = join(homedir(), ".pi", "agent", "handoffs");
@@ -30,7 +31,7 @@ type PendingRelay = {
   readonly sourceSessionId: string;
   readonly sourceModel: ModelReference;
   readonly targetModel: ModelReference;
-  readonly thinkingLevel: string | undefined;
+  readonly thinkingLevel: ThinkingLevel | undefined;
   readonly sessionName: string | undefined;
   readonly projectName: string;
   readonly focus: string;
@@ -39,6 +40,38 @@ type PendingRelay = {
 type ActiveRelay = {
   readonly settle: () => void;
 };
+
+type ThinkingLevel = Parameters<ExtensionAPI["setThinkingLevel"]>[0];
+
+type RelayEntryData = {
+  readonly targetModel?: ModelReference;
+  readonly thinkingLevel?: ThinkingLevel;
+};
+
+function getRelayEntryData(ctx: ExtensionContext): RelayEntryData | undefined {
+  const branch = ctx.sessionManager.getBranch();
+  for (let index = branch.length - 1; index >= 0; index -= 1) {
+    const entry = branch[index];
+    if (
+      entry.type !== "custom" ||
+      entry.customType !== "pi-relay" ||
+      typeof entry.data !== "object" ||
+      !entry.data
+    ) {
+      continue;
+    }
+
+    const data = entry.data as RelayEntryData;
+    if (
+      typeof data.targetModel?.provider !== "string" ||
+      typeof data.targetModel.id !== "string"
+    ) {
+      return undefined;
+    }
+    return data;
+  }
+  return undefined;
+}
 
 async function selectTargetModel(
   ctx: ExtensionCommandContext,
@@ -184,6 +217,42 @@ function relaySessionName(sessionName: string | undefined, projectName: string):
 export default function relay(pi: ExtensionAPI) {
   let activeRelay: ActiveRelay | undefined;
 
+  pi.on("session_start", async (event, ctx) => {
+    if (event.reason !== "new") return;
+
+    const relayData = getRelayEntryData(ctx);
+    if (!relayData?.targetModel) return;
+
+    const targetModel = ctx.modelRegistry.find(
+      relayData.targetModel.provider,
+      relayData.targetModel.id,
+    );
+    if (!targetModel) {
+      ctx.ui.notify(
+        `Relay target model is unavailable: ${relayData.targetModel.provider}/${relayData.targetModel.id}`,
+        "error",
+      );
+      return;
+    }
+
+    // setup() records the requested model in the session, but Pi creates the
+    // replacement runtime before setup() runs. Activate it explicitly from the
+    // freshly-bound extension instance before withSession() sends the kickoff.
+    const alreadySelected =
+      ctx.model?.provider === targetModel.provider && ctx.model.id === targetModel.id;
+    const selected = alreadySelected || (await pi.setModel(targetModel));
+    if (!selected) {
+      ctx.ui.notify(
+        `Relay target model has no configured credentials: ${targetModel.provider}/${targetModel.id}`,
+        "error",
+      );
+      return;
+    }
+    if (relayData.thinkingLevel) {
+      pi.setThinkingLevel(relayData.thinkingLevel);
+    }
+  });
+
   pi.registerCommand("relay", {
     description: "Write a durable handoff and continue in a fresh session with a model selector",
     handler: async (args, ctx) => {
@@ -281,9 +350,23 @@ export default function relay(pi: ExtensionAPI) {
             handoffPath: relayState.handoffPath,
             sourceSessionFile: relayState.sourceSessionFile,
             sourceSessionId: relayState.sourceSessionId,
+            targetModel: relayState.targetModel,
+            thinkingLevel: relayState.thinkingLevel,
           });
         },
         withSession: async (next) => {
+          const actualModel = next.model;
+          if (
+            !actualModel ||
+            actualModel.provider !== relayState.targetModel.provider ||
+            actualModel.id !== relayState.targetModel.id
+          ) {
+            next.ui.notify(
+              `Relay stopped: could not activate ${relayState.targetModel.provider}/${relayState.targetModel.id}`,
+              "error",
+            );
+            return;
+          }
           next.ui.notify(
             `Relay ready on ${relayState.targetModel.provider}/${relayState.targetModel.id}`,
             "info",

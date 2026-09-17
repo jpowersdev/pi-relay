@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Ensure the selected relay model is activated in the replacement runtime before its kickoff turn.
+
 ## 0.1.0
 
 - Add `/relay` with an interactive target-model selector.
